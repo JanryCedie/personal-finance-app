@@ -20,7 +20,7 @@ const BreakdownChart = ({ refreshTrigger }) => {
 
     const fetchBreakdown = async () => {
         try {
-            const response = await axios.get('http://localhost:8000/report/breakdown');
+            const response = await axios.get('/api/report/breakdown');
             setBreakdownData(response.data);
         } catch (error) {
             console.error("Error fetching breakdown", error);

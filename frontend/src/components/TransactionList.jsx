@@ -12,7 +12,7 @@ const TransactionList = ({ refreshTrigger, onTransactionDeleted }) => {
 
     const fetchTransactions = async () => {
         try {
-            const response = await axios.get('http://localhost:8000/transactions/?limit=10');
+            const response = await axios.get('/api/transactions/?limit=10');
             const sorted = response.data.sort((a, b) => new Date(b.date) - new Date(a.date));
             setTransactions(sorted);
             setSelectedIds([]); // Clear selection on refresh
@@ -24,7 +24,7 @@ const TransactionList = ({ refreshTrigger, onTransactionDeleted }) => {
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to delete this transaction?")) return;
         try {
-            await axios.delete(`http://localhost:8000/transactions/${id}`);
+            await axios.delete(`/api/transactions/${id}`);
             onTransactionDeleted(); // Trigger refresh
             fetchTransactions();
         } catch (error) {
@@ -42,7 +42,7 @@ const TransactionList = ({ refreshTrigger, onTransactionDeleted }) => {
         if (!window.confirm(`Delete ${selectedIds.length} transactions?`)) return;
         try {
             // Parallel deletes for simplicity (or implement bulk delete API later)
-            await Promise.all(selectedIds.map(id => axios.delete(`http://localhost:8000/transactions/${id}`)));
+            await Promise.all(selectedIds.map(id => axios.delete(`/api/transactions/${id}`)));
             onTransactionDeleted();
             fetchTransactions();
         } catch (error) {

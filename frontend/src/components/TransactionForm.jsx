@@ -12,7 +12,7 @@ const TransactionForm = ({ onTransactionAdded }) => {
         if (!amount || !description) return;
         setLoading(true);
         try {
-            await axios.post('http://localhost:8000/transactions/', {
+            await axios.post('/api/transactions/', {
                 type,
                 amount: parseFloat(amount),
                 description
@@ -36,8 +36,8 @@ const TransactionForm = ({ onTransactionAdded }) => {
                         type="button"
                         onClick={() => setType('credit')}
                         className={`flex-1 py-2 rounded-lg font-medium transition-colors duration-200 ${type === 'credit'
-                                ? 'bg-green-500 text-white shadow-md'
-                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            ? 'bg-green-500 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                             }`}
                     >
                         Credit (Income)
@@ -46,8 +46,8 @@ const TransactionForm = ({ onTransactionAdded }) => {
                         type="button"
                         onClick={() => setType('debit')}
                         className={`flex-1 py-2 rounded-lg font-medium transition-colors duration-200 ${type === 'debit'
-                                ? 'bg-red-500 text-white shadow-md'
-                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            ? 'bg-red-500 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                             }`}
                     >
                         Debit (Expense)
