@@ -1,105 +1,87 @@
 const express = require('express');
 const cors = require('cors');
-const db = require('./database');
+const connectDB = require('./database');
+const Transaction = require('./models/Transaction');
 
 const app = express();
-const PORT = 8000;
+const PORT = process.env.PORT || 8000; // Vercel sets PORT
+
+// Connect to Database
+connectDB();
 
 app.use(cors());
 app.use(express.json());
 
 // Get all transactions
-app.get('/transactions/', (req, res) => {
-    const { skip = 0, limit = 100 } = req.query;
-    const sql = `SELECT * FROM transactions LIMIT ? OFFSET ?`;
-    db.all(sql, [limit, skip], (err, rows) => {
-        if (err) {
-            res.status(400).json({ "error": err.message });
-            return;
-        }
-        res.json(rows);
-    });
+app.get('/transactions/', async (req, res) => {
+    try {
+        const { skip = 0, limit = 100 } = req.query;
+        // Skip and limit need to be integers
+        const skipInt = parseInt(skip);
+        const limitInt = parseInt(limit);
+
+        const transactions = await Transaction.find()
+            .sort({ date: 1 }) // sort by date ascending? Python code didn't explicitly sort list, just offsets. 
+            // Weekly report sorted by week.
+            // Let's just return default order or by date.
+            .skip(skipInt)
+            .limit(limitInt);
+
+        res.json(transactions);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Create transaction
-app.post('/transactions/', (req, res) => {
-    const { type, amount, description } = req.body;
-    // Date handled by default CURRENT_TIMESTAMP, or we can insert current date in ISO format
-    // Python used datetime.datetime.utcnow which is UTC.
-    // Let's use ISO string for consistency if we insert from JS.
-    const date = new Date().toISOString();
-
-    // However, the table might rely on default. Let's pass it explicitly to match Python's behavior of setting it on creation if needed,
-    // but Python model had `default=datetime.datetime.utcnow`. 
-    // The previous Python code inserted `id`, `type`, `amount`, `description`, `date` (auto).
-    // Let's rely on SQLite default if we defined it, or pass it.
-    // In database.js we defined DEFAULT CURRENT_TIMESTAMP.
-
-    const sql = `INSERT INTO transactions (type, amount, description, date) VALUES (?,?,?,?)`;
-    const params = [type, amount, description, date];
-
-    db.run(sql, params, function (err, result) {
-        if (err) {
-            res.status(400).json({ "error": err.message });
-            return;
-        }
-        res.json({
-            id: this.lastID,
+app.post('/transactions/', async (req, res) => {
+    try {
+        const { type, amount, description } = req.body;
+        const transaction = new Transaction({
             type,
             amount,
-            description,
-            date
+            description
+            // date defaults to now in model
         });
-    });
+
+        const savedTransaction = await transaction.save();
+        res.json(savedTransaction);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 // Delete transaction
-app.delete('/transactions/:id', (req, res) => {
-    const sql = `DELETE FROM transactions WHERE id = ?`;
-    db.run(sql, req.params.id, function (err, result) {
-        if (err) {
-            res.status(400).json({ "error": res.message });
-            return;
+app.delete('/transactions/:id', async (req, res) => {
+    try {
+        const result = await Transaction.findByIdAndDelete(req.params.id);
+        if (!result) {
+            return res.status(404).json({ detail: "Transaction not found" });
         }
-        // this.changes gives rows affected
-        if (this.changes === 0) {
-            res.status(404).json({ "detail": "Transaction not found" }); // Match Python error detail
-            return;
-        }
-        res.json({ "message": "Transaction deleted successfully" });
-    });
+        res.json({ message: "Transaction deleted successfully" });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 // Weekly Report
-app.get('/report/weekly', (req, res) => {
-    const sql = `SELECT * FROM transactions`;
-    db.all(sql, [], (err, rows) => {
-        if (err) {
-            res.status(400).json({ "error": err.message });
-            return;
-        }
-
+app.get('/report/weekly', async (req, res) => {
+    try {
+        const transactions = await Transaction.find();
         const weeklyData = {};
 
-        rows.forEach(t => {
-            // t.date might be a string "YYYY-MM-DD HH:MM:SS" or ISO
+        transactions.forEach(t => {
             const dateObj = new Date(t.date);
-            // Get Monday of the week
-            const day = dateObj.getDay(); // 0 is Sunday
-            const diff = dateObj.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-            // Note: Python code: week_start = t.date - datetime.timedelta(days=t.date.weekday())
-            // Python weekday(): Monday is 0, Sunday is 6.
-            // JS getDay(): Sunday is 0, Monday is 1.
-            // So Python's logic: date - weekday.
-            // JS equivalent: date - (day === 0 ? 6 : day - 1).
-
+            const day = dateObj.getDay();
+            // MongoDB/JS Dates are same.
+            // Python logic: week_start = date - weekday() (Monday=0)
+            // JS getDay(): Sunday=0, Monday=1
             const jsDay = dateObj.getDay();
             const pythonWeekday = jsDay === 0 ? 6 : jsDay - 1;
 
             const weekStart = new Date(dateObj);
             weekStart.setDate(dateObj.getDate() - pythonWeekday);
 
-            // Format YYYY-MM-DD
             const weekKey = weekStart.toISOString().split('T')[0];
 
             if (!weeklyData[weekKey]) {
@@ -123,21 +105,18 @@ app.get('/report/weekly', (req, res) => {
         report.sort((a, b) => a.week.localeCompare(b.week));
 
         res.json(report);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Breakdown Report
-app.get('/report/breakdown', (req, res) => {
-    const sql = `SELECT * FROM transactions`;
-    db.all(sql, [], (err, rows) => {
-        if (err) {
-            res.status(400).json({ "error": err.message });
-            return;
-        }
-
+app.get('/report/breakdown', async (req, res) => {
+    try {
+        const transactions = await Transaction.find();
         const breakdown = { credit: {}, debit: {} };
 
-        rows.forEach(t => {
+        transactions.forEach(t => {
             const category = t.description ? t.description.trim().replace(/^\w/, c => c.toUpperCase()) : "Uncategorized";
             const typeKey = t.type;
 
@@ -150,23 +129,24 @@ app.get('/report/breakdown', (req, res) => {
         });
 
         const result = [];
-        for (const type in breakdown) {
-            for (const category in breakdown[type]) {
-                result.append({ type, category, amount: breakdown[type][category] });
-            }
-        }
-        // Wait, JS result.append is result.push
-        const finalResult = [];
         Object.keys(breakdown).forEach(type => {
             Object.keys(breakdown[type]).forEach(cat => {
-                finalResult.push({ type: type, category: cat, amount: breakdown[type][cat] });
+                result.push({ type: type, category: cat, amount: breakdown[type][cat] });
             });
         });
 
-        res.json(finalResult);
-    });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+// Export app for Vercel
+module.exports = app;
+
+// Only listen if run directly (node server.js), not when imported by Vercel
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
