@@ -20,3 +20,6 @@ yarn-error.log*
 
 # MacOS
 .DS_Store
+
+# Valid text file
+backend_backup/
